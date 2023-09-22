@@ -8,7 +8,7 @@ import { v4 as uuidv4 } from "uuid";
 import yargs from "yargs/yargs";
 import { customMapper } from "../lib/custom-mapper";
 import { getConfig } from "../lib/get-config";
-import { listQueues } from "../lib/list-queues";
+import { RedriveClient } from "../lib/redrive-client";
 import fs = require("fs");
 
 interface Args {
@@ -49,11 +49,10 @@ async function script() {
   const argv = await parser.argv;
 
   const config = getConfig(argv.config);
-  const queues = await listQueues(
-    client,
-    config.map((configEntry) => configEntry.source),
-  );
-  console.log(queues);
+  const redriveClient = await new RedriveClient(config, client).initialize();
+
+  redriveClient.printQueues();
+
   // let messages: Message[] | undefined;
 
   // // Retrieve messages either from source or from cache
