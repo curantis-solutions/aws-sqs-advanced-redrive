@@ -1,0 +1,34 @@
+{
+  "name": "aws-sqs-advanced-redrive",
+  "version": "1.0.0",
+  "description": "",
+  "main": "src/redrive.ts",
+  "scripts": {
+    "redrive": "ts-node src/redrive.ts",
+    "prettier": "prettier --write \"**/*.{html,js,json,md,xml,yaml,yml,ts}\"",
+    "prettier:verify": "prettier --list-different \"**/*.{html,js,json,md,xml,yaml,yml,ts}\"",
+    "postinstall": "husky install",
+    "precommit": "lint-staged"
+  },
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "@aws-sdk/client-sqs": "^3.414.0",
+    "typescript": "^5.2.2",
+    "uuid": "^9.0.1",
+    "yaml": "^2.3.2",
+    "yargs": "^17.7.2"
+  },
+  "devDependencies": {
+    "@types/uuid": "^9.0.4",
+    "husky": "^8.0.3",
+    "lint-staged": "^14.0.1",
+    "prettier": "^3.0.3",
+    "ts-node": "^10.9.1"
+  },
+  "lint-staged": {
+    "**/*.{html,js,json,md,xml,yaml,yml,ts}": [
+      "prettier --write"
+    ]
+  }
+}
