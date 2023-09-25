@@ -1,5 +1,5 @@
 export type Config = {
-  count: number;
+  receiveCount: number;
   dataDirectory: string;
   parseBody: boolean;
   queueConfigs: QueueConfig[];

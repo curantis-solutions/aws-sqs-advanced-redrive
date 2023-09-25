@@ -45,9 +45,17 @@ export class RedriveClient {
       this.redriveQueueList.map((redriveQueue) =>
         redriveQueue.receiveMessages(
           this.config.dataDirectory,
-          this.config.count,
+          this.config.receiveCount,
           this.config.parseBody,
         ),
+      ),
+    );
+  }
+
+  async sendMessages(): Promise<void> {
+    await Promise.all(
+      this.redriveQueueList.map((redriveQueue) =>
+        redriveQueue.sendMessages(this.config.dataDirectory),
       ),
     );
   }

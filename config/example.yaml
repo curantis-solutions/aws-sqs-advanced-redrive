@@ -1,4 +1,4 @@
-count: 10
+receiveCount: 10
 dataDirectory: messages
 queueConfigs:
   - source: source-dlq

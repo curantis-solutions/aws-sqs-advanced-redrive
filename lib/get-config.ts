@@ -8,7 +8,7 @@ export function getConfig(path: string): Config {
 
   // defaults
   config.dataDirectory = config.dataDirectory ?? "messages";
-  config.count = config.count ?? 10;
+  config.receiveCount = config.receiveCount ?? 10;
   config.parseBody = config.parseBody ?? true;
 
   return config;

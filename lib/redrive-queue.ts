@@ -1,21 +1,22 @@
 import {
   GetQueueAttributesCommand,
   GetQueueUrlCommand,
+  Message,
   ReceiveMessageCommand,
   SQSClient,
+  SendMessageBatchCommand,
 } from "@aws-sdk/client-sqs";
 import fs from "fs";
+import { v4 as uuidv4 } from "uuid";
+import { Constants } from "./constants/constants";
 import { QueueConfig } from "./models/config";
 import { batch } from "./util";
 
 export class RedriveQueue {
-  // During initialization
   public queueConfig: QueueConfig;
   private client: SQSClient;
   public queueUrl!: string;
   public queueAttributes!: Record<string, string>;
-
-  // Retrieve step
 
   constructor(queueConfig: QueueConfig, client: SQSClient) {
     this.queueConfig = queueConfig;
@@ -57,11 +58,11 @@ export class RedriveQueue {
 
   async receiveMessages(
     dataDirectory: string,
-    count: number,
+    receiveCount: number,
     parseBody: boolean,
   ): Promise<void> {
-    const range = Array.from(Array(count).keys());
-    const batches = batch(range, 10); // 10 is the SQS limit
+    const range = Array.from(Array(receiveCount).keys());
+    const batches = batch(range, Constants.sqsBatchLimit);
 
     let totalMessages = 0;
     for (const batch of batches) {
@@ -87,13 +88,14 @@ export class RedriveQueue {
         });
       }
 
+      // Setup directory structure
+      const baseDirectory = `${dataDirectory}/${this.queueConfig.source}`;
+      const receivedDirectory = `${baseDirectory}/${Constants.receivedDirectory}`;
+      this.setupDirectories(baseDirectory);
+
       // Write to filesystem
-      const dir = `${dataDirectory}/${this.queueConfig.source}/received`;
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
-      }
       for (const message of Messages ?? []) {
-        const filename = `${dir}/${message.MessageId}.json`;
+        const filename = `${receivedDirectory}/${message.MessageId}.json`;
         fs.writeFileSync(filename, JSON.stringify(message, null, 2));
       }
       console.debug(
@@ -103,6 +105,80 @@ export class RedriveQueue {
     }
     console.log(
       `Received total of ${totalMessages} messages for ${this.queueConfig.source}.`,
+    );
+  }
+
+  setupDirectories(baseDirectory: string) {
+    for (const directory of Constants.directoriesToCreate) {
+      if (!fs.existsSync(`${baseDirectory}/${directory}`)) {
+        fs.mkdirSync(`${baseDirectory}/${directory}`, { recursive: true });
+      }
+      for (const subdirectory of Constants.subdirectoriesToCreate) {
+        if (directory === Constants.receivedDirectory) continue;
+        if (!fs.existsSync(`${baseDirectory}/${directory}/${subdirectory}`)) {
+          fs.mkdirSync(`${baseDirectory}/${directory}/${subdirectory}`);
+        }
+      }
+    }
+  }
+
+  async sendMessages(dataDirectory: string): Promise<void> {
+    const baseDir = `${dataDirectory}/${this.queueConfig.source}`;
+    const updatesPendingDirectory = `${baseDir}/${Constants.updatesDirectory}/${Constants.pendingSubdirectory}`;
+    const updatesErrorDirectory = `${baseDir}/${Constants.updatesDirectory}/${Constants.errorsSubdirectory}`;
+    const updatesArchivedDirectory = `${baseDir}/${Constants.updatesDirectory}/${Constants.archivedSubdirectory}`;
+    const files = fs.readdirSync(updatesPendingDirectory);
+    if (files.length === 0) {
+      console.log(`No messages to send for ${this.queueConfig.source}`);
+      return;
+    }
+
+    const batchedFiles = batch(files, Constants.sqsBatchLimit);
+    let totalMessages = 0;
+    let totalErrors = 0;
+    for (const fileBatch of batchedFiles) {
+      const messages = fileBatch.map(
+        (file) =>
+          JSON.parse(
+            fs.readFileSync(`${updatesPendingDirectory}/${file}`).toString(),
+          ) as Message,
+      );
+
+      try {
+        await this.client.send(
+          new SendMessageBatchCommand({
+            QueueUrl: this.queueConfig.destination,
+            Entries: messages.map((message) => {
+              return { Id: uuidv4(), MessageBody: JSON.stringify(message) };
+            }),
+          }),
+        );
+        console.debug(
+          `Sent batch of ${messages.length} messages to ${this.queueConfig.destination} for ${this.queueConfig.source}.`,
+        );
+        for (const file of fileBatch) {
+          fs.renameSync(
+            `${updatesPendingDirectory}/${file}`,
+            `${updatesArchivedDirectory}/${file}`,
+          );
+        }
+        totalMessages += messages.length;
+      } catch (error) {
+        console.error(error);
+        for (const file of fileBatch) {
+          fs.renameSync(
+            `${updatesPendingDirectory}/${file}`,
+            `${updatesErrorDirectory}/${file}`,
+          );
+        }
+        totalErrors += messages.length;
+      }
+    }
+    console.log(
+      `Sent total of ${totalMessages} messages to ${this.queueConfig.destination} for ${this.queueConfig.source}.`,
+    );
+    console.log(
+      `Error sending ${totalErrors} messages to ${this.queueConfig.destination} for ${this.queueConfig.source}.`,
     );
   }
 }

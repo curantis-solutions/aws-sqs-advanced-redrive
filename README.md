@@ -21,9 +21,18 @@ Receive messages:
   /<queue name>
       /received (original messages from --receive)
         <message id>.json
-      /updates (place messages in here to send message to destination queue and delete them from the source queue)
-      /delete (place messages in here to delete the messages from the source queue)
-      /skip (place messages here to skip)
+      /updates
+        /pending (place messages here to send and delete from the source queue)
+        /archived (messages placed here on success)
+        /errors (messages placed here on failure)
+      /delete
+        /pending (place messages in here to delete the messages from the source queue)
+        /archived (messages placed here on success)
+        /errors (messages placed here on failure)
+      /skip
+        /pending (place messages here to skip)
+        /archived (messages placed here on success)
+        /errors (messages placed here on failure)
 ```
 
 ## Debugging
