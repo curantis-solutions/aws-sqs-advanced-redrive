@@ -51,5 +51,5 @@ Example `.vscode/launch.json`:
 Create a file `.env` with:
 
 ```
-export AWS_PROFILE=<env>
+export AWS_PROFILE=<profile>
 ```
