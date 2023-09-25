@@ -16,12 +16,18 @@ import { batch } from "./util";
 export class RedriveQueue {
   public queueConfig: QueueConfig;
   private client: SQSClient;
+  private baseDirectory: string;
   public queueUrl!: string;
   public queueAttributes!: Record<string, string>;
 
-  constructor(queueConfig: QueueConfig, client: SQSClient) {
+  constructor(
+    queueConfig: QueueConfig,
+    client: SQSClient,
+    dataDirectory: string,
+  ) {
     this.queueConfig = queueConfig;
     this.client = client;
+    this.baseDirectory = `${dataDirectory}/${this.queueConfig.source}`;
   }
 
   async getQueueUrl() {
@@ -58,7 +64,6 @@ export class RedriveQueue {
   }
 
   async receiveMessages(
-    dataDirectory: string,
     receiveCount: number,
     parseBody: boolean,
   ): Promise<void> {
@@ -90,9 +95,8 @@ export class RedriveQueue {
       }
 
       // Setup directory structure
-      const baseDirectory = `${dataDirectory}/${this.queueConfig.source}`;
-      const receivedDirectory = `${baseDirectory}/${Constants.receivedDirectory}`;
-      this.setupDirectories(baseDirectory);
+      const receivedDirectory = `${this.baseDirectory}/${Constants.receivedDirectory}`;
+      this.setupDirectories();
 
       // Write to filesystem
       for (const message of Messages ?? []) {
@@ -109,26 +113,28 @@ export class RedriveQueue {
     );
   }
 
-  setupDirectories(baseDirectory: string) {
+  setupDirectories() {
     for (const directory of Constants.directoriesToCreate) {
-      if (!fs.existsSync(`${baseDirectory}/${directory}`)) {
-        fs.mkdirSync(`${baseDirectory}/${directory}`, { recursive: true });
+      if (!fs.existsSync(`${this.baseDirectory}/${directory}`)) {
+        fs.mkdirSync(`${this.baseDirectory}/${directory}`, { recursive: true });
       }
-      for (const subdirectory of Constants.subdirectoriesToCreate) {
-        if (directory === Constants.receivedDirectory) continue;
-        if (!fs.existsSync(`${baseDirectory}/${directory}/${subdirectory}`)) {
-          fs.mkdirSync(`${baseDirectory}/${directory}/${subdirectory}`);
+      if (Constants.directoriesWithSubdirectories.includes(directory)) {
+        for (const subdirectory of Constants.subdirectoriesToCreate) {
+          if (
+            !fs.existsSync(`${this.baseDirectory}/${directory}/${subdirectory}`)
+          ) {
+            fs.mkdirSync(`${this.baseDirectory}/${directory}/${subdirectory}`);
+          }
         }
       }
     }
   }
 
-  async sendMessages(dataDirectory: string, parseBody: boolean): Promise<void> {
-    const baseDir = `${dataDirectory}/${this.queueConfig.source}`;
-    const updatesPendingDirectory = `${baseDir}/${Constants.updatesDirectory}/${Constants.pendingSubdirectory}`;
-    const updatesErrorDirectory = `${baseDir}/${Constants.updatesDirectory}/${Constants.errorsSubdirectory}`;
-    const updatesArchivedDirectory = `${baseDir}/${Constants.updatesDirectory}/${Constants.archivedSubdirectory}`;
-    const deletesPendingDirectory = `${baseDir}/${Constants.deletesDirectory}/${Constants.pendingSubdirectory}`;
+  async sendMessages(parseBody: boolean): Promise<void> {
+    const updatesPendingDirectory = `${this.baseDirectory}/${Constants.updatesDirectory}/${Constants.pendingSubdirectory}`;
+    const updatesErrorDirectory = `${this.baseDirectory}/${Constants.updatesDirectory}/${Constants.errorsSubdirectory}`;
+    const updatesArchivedDirectory = `${this.baseDirectory}/${Constants.updatesDirectory}/${Constants.archivedSubdirectory}`;
+    const deletesPendingDirectory = `${this.baseDirectory}/${Constants.deletesDirectory}/${Constants.pendingSubdirectory}`;
 
     const files = fs.readdirSync(updatesPendingDirectory);
     if (files.length === 0) {
@@ -210,11 +216,12 @@ export class RedriveQueue {
     }
   }
 
-  async deleteMessages(dataDirectory: string): Promise<void> {
-    const baseDir = `${dataDirectory}/${this.queueConfig.source}`;
-    const deletesPendingDirectory = `${baseDir}/${Constants.deletesDirectory}/${Constants.pendingSubdirectory}`;
-    const deletesErrorsDirectory = `${baseDir}/${Constants.deletesDirectory}/${Constants.errorsSubdirectory}`;
-    const deletesArchivedDirectory = `${baseDir}/${Constants.deletesDirectory}/${Constants.archivedSubdirectory}`;
+  async processMessages(): Promise<void> {}
+
+  async deleteMessages(): Promise<void> {
+    const deletesPendingDirectory = `${this.baseDirectory}/${Constants.deletesDirectory}/${Constants.pendingSubdirectory}`;
+    const deletesErrorsDirectory = `${this.baseDirectory}/${Constants.deletesDirectory}/${Constants.errorsSubdirectory}`;
+    const deletesArchivedDirectory = `${this.baseDirectory}/${Constants.deletesDirectory}/${Constants.archivedSubdirectory}`;
 
     const files = fs.readdirSync(deletesPendingDirectory);
     if (files.length === 0) {

@@ -26,6 +26,12 @@ const parser = yargs(process.argv.slice(2))
     type: "boolean",
     describe: "Send messages from the filesystem to their destination.",
   })
+  .option("process", {
+    alias: "p",
+    type: "boolean",
+    describe:
+      "Copies, with potential filtering and modifications, the message from `received` to `updates/pending`, `skip`, or `deletes/pending`.",
+  })
   .option("delete", {
     alias: "d",
     type: "boolean",
@@ -47,6 +53,10 @@ async function script() {
 
   if (argv.receive) {
     await redriveClient.receiveMessages();
+  }
+
+  if (argv.process) {
+    await redriveClient.processMessages();
   }
 
   if (argv.send) {

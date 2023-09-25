@@ -17,6 +17,11 @@ export namespace Constants {
   export const errorsSubdirectory = "errors";
   export const archivedSubdirectory = "archived";
 
+  export const directoriesWithSubdirectories = [
+    deletesDirectory,
+    updatesDirectory,
+  ];
+
   export const subdirectoriesToCreate = [
     pendingSubdirectory,
     errorsSubdirectory,

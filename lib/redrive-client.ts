@@ -25,6 +25,7 @@ export class RedriveClient {
       redriveClient.redriveQueues[queueConfig.source] = new RedriveQueue(
         queueConfig,
         redriveClient.client,
+        config.dataDirectory,
       );
     }
     await Promise.all(
@@ -44,7 +45,6 @@ export class RedriveClient {
     await Promise.all(
       this.redriveQueueList.map((redriveQueue) =>
         redriveQueue.receiveMessages(
-          this.config.dataDirectory,
           this.config.receiveCount,
           this.config.parseBody,
         ),
@@ -52,13 +52,18 @@ export class RedriveClient {
     );
   }
 
+  async processMessages(): Promise<void> {
+    await Promise.all(
+      this.redriveQueueList.map((redriveQueue) =>
+        redriveQueue.processMessages(),
+      ),
+    );
+  }
+
   async sendMessages(): Promise<void> {
     await Promise.all(
       this.redriveQueueList.map((redriveQueue) =>
-        redriveQueue.sendMessages(
-          this.config.dataDirectory,
-          this.config.parseBody,
-        ),
+        redriveQueue.sendMessages(this.config.parseBody),
       ),
     );
   }
@@ -66,7 +71,7 @@ export class RedriveClient {
   async deleteMessages(): Promise<void> {
     await Promise.all(
       this.redriveQueueList.map((redriveQueue) =>
-        redriveQueue.deleteMessages(this.config.dataDirectory),
+        redriveQueue.deleteMessages(),
       ),
     );
   }
