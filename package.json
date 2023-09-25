@@ -4,7 +4,7 @@
   "description": "",
   "main": "src/redrive.ts",
   "scripts": {
-    "redrive": "ts-node src/redrive.ts",
+    "redrive": "ts-node src/app.ts",
     "prettier": "prettier --write \"**/*.{html,js,json,md,xml,yaml,yml,ts}\"",
     "prettier:verify": "prettier --list-different \"**/*.{html,js,json,md,xml,yaml,yml,ts}\"",
     "postinstall": "husky install",
