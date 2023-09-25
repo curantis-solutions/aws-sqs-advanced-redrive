@@ -1,4 +1,5 @@
 import {
+  DeleteMessageBatchCommand,
   GetQueueAttributesCommand,
   GetQueueUrlCommand,
   Message,
@@ -122,11 +123,13 @@ export class RedriveQueue {
     }
   }
 
-  async sendMessages(dataDirectory: string): Promise<void> {
+  async sendMessages(dataDirectory: string, parseBody: boolean): Promise<void> {
     const baseDir = `${dataDirectory}/${this.queueConfig.source}`;
     const updatesPendingDirectory = `${baseDir}/${Constants.updatesDirectory}/${Constants.pendingSubdirectory}`;
     const updatesErrorDirectory = `${baseDir}/${Constants.updatesDirectory}/${Constants.errorsSubdirectory}`;
     const updatesArchivedDirectory = `${baseDir}/${Constants.updatesDirectory}/${Constants.archivedSubdirectory}`;
+    const deletesPendingDirectory = `${baseDir}/${Constants.deletesDirectory}/${Constants.pendingSubdirectory}`;
+
     const files = fs.readdirSync(updatesPendingDirectory);
     if (files.length === 0) {
       console.log(`No messages to send for ${this.queueConfig.source}`);
@@ -144,41 +147,144 @@ export class RedriveQueue {
           ) as Message,
       );
 
+      let atLeastOneFailure = false;
       try {
-        await this.client.send(
+        const { Failed } = await this.client.send(
           new SendMessageBatchCommand({
             QueueUrl: this.queueConfig.destination,
             Entries: messages.map((message) => {
-              return { Id: uuidv4(), MessageBody: JSON.stringify(message) };
+              return {
+                Id: uuidv4(),
+                MessageBody: parseBody
+                  ? JSON.stringify(message.Body)
+                  : message.Body,
+              };
             }),
           }),
         );
+
+        atLeastOneFailure = (Failed?.length ?? 0) > 0;
+        if (atLeastOneFailure) {
+          throw new Error(
+            `At least one message in batch failed to send to ${this.queueConfig.destination} for ${this.queueConfig.source}.`,
+          );
+        }
+
         console.debug(
-          `Sent batch of ${messages.length} messages to ${this.queueConfig.destination} for ${this.queueConfig.source}.`,
+          `Sent batch of ${fileBatch.length} messages to ${this.queueConfig.destination} for ${this.queueConfig.source}.`,
         );
         for (const file of fileBatch) {
+          // Copy successful sends to the `deletes/pending` folder
+          fs.cpSync(
+            `${updatesPendingDirectory}/${file}`,
+            `${deletesPendingDirectory}/${file}`,
+          );
+          // Move successful sends to archive folder
           fs.renameSync(
             `${updatesPendingDirectory}/${file}`,
             `${updatesArchivedDirectory}/${file}`,
           );
         }
-        totalMessages += messages.length;
+        totalMessages += fileBatch.length;
       } catch (error) {
         console.error(error);
+      }
+
+      if (atLeastOneFailure) {
         for (const file of fileBatch) {
           fs.renameSync(
             `${updatesPendingDirectory}/${file}`,
             `${updatesErrorDirectory}/${file}`,
           );
         }
-        totalErrors += messages.length;
+        totalErrors += fileBatch.length;
       }
     }
     console.log(
       `Sent total of ${totalMessages} messages to ${this.queueConfig.destination} for ${this.queueConfig.source}.`,
     );
+    if (totalErrors > 0) {
+      console.log(
+        `Error sending ${totalErrors} messages to ${this.queueConfig.destination} for ${this.queueConfig.source}.`,
+      );
+    }
+  }
+
+  async deleteMessages(dataDirectory: string): Promise<void> {
+    const baseDir = `${dataDirectory}/${this.queueConfig.source}`;
+    const deletesPendingDirectory = `${baseDir}/${Constants.deletesDirectory}/${Constants.pendingSubdirectory}`;
+    const deletesErrorsDirectory = `${baseDir}/${Constants.deletesDirectory}/${Constants.errorsSubdirectory}`;
+    const deletesArchivedDirectory = `${baseDir}/${Constants.deletesDirectory}/${Constants.archivedSubdirectory}`;
+
+    const files = fs.readdirSync(deletesPendingDirectory);
+    if (files.length === 0) {
+      console.log(`No messages to delete for ${this.queueConfig.source}`);
+      return;
+    }
+
+    const batchedFiles = batch(files, Constants.sqsBatchLimit);
+    let totalMessages = 0;
+    let totalErrors = 0;
+    for (const fileBatch of batchedFiles) {
+      const messages = fileBatch.map(
+        (file) =>
+          JSON.parse(
+            fs.readFileSync(`${deletesPendingDirectory}/${file}`).toString(),
+          ) as Message,
+      );
+
+      let atLeastOneFailure = false;
+      try {
+        const { Failed } = await this.client.send(
+          new DeleteMessageBatchCommand({
+            QueueUrl: this.queueConfig.source,
+            Entries: messages.map((message) => ({
+              Id: message.MessageId,
+              ReceiptHandle: message.ReceiptHandle,
+            })),
+          }),
+        );
+
+        atLeastOneFailure = (Failed?.length ?? 0) > 0;
+        if (atLeastOneFailure) {
+          throw new Error(
+            `At least one message in batch failed to delete for ${this.queueConfig.source}.`,
+          );
+        }
+
+        console.debug(
+          `Deleted batch of ${batchedFiles.length} messages from ${this.queueConfig.source}.`,
+        );
+
+        for (const file of batchedFiles) {
+          // Move successful deletes to archive folder
+          fs.renameSync(
+            `${deletesPendingDirectory}/${file}`,
+            `${deletesArchivedDirectory}/${file}`,
+          );
+        }
+        totalMessages += batchedFiles.length;
+      } catch (error) {
+        console.error(error);
+      }
+
+      if (atLeastOneFailure) {
+        for (const file of fileBatch) {
+          fs.renameSync(
+            `${deletesPendingDirectory}/${file}`,
+            `${deletesErrorsDirectory}/${file}`,
+          );
+        }
+        totalErrors += fileBatch.length;
+      }
+    }
     console.log(
-      `Error sending ${totalErrors} messages to ${this.queueConfig.destination} for ${this.queueConfig.source}.`,
+      `Deleted total of ${totalMessages} messages from ${this.queueConfig.source}.`,
     );
+    if (totalErrors > 0) {
+      console.log(
+        `Error deleting ${totalErrors} messages to from ${this.queueConfig.source}.`,
+      );
+    }
   }
 }
