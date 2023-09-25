@@ -1,2 +1,5 @@
-- source: source-dlq
-  destination: source-queue
+count: 10
+dataDirectory: messages
+queueConfigs:
+  - source: source-dlq
+    destination: source-queue

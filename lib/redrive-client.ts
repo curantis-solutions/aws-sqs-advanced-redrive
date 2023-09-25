@@ -1,9 +1,6 @@
-import {
-  GetQueueAttributesCommand,
-  GetQueueUrlCommand,
-  SQSClient,
-} from "@aws-sdk/client-sqs";
-import { Config, ConfigEntry } from "./models/config";
+import { SQSClient } from "@aws-sdk/client-sqs";
+import { Config } from "./models/config";
+import { RedriveQueue } from "./redrive-queue";
 
 export class RedriveClient {
   public config: Config;
@@ -19,20 +16,40 @@ export class RedriveClient {
     return Object.values(this.redriveQueues);
   }
 
-  async initialize(): Promise<RedriveClient> {
-    for (const configEntry of this.config) {
-      this.redriveQueues[configEntry.source] = new RedriveQueue(
-        configEntry,
-        this.client,
+  static async createClient(
+    config: Config,
+    client: SQSClient,
+  ): Promise<RedriveClient> {
+    const redriveClient = new RedriveClient(config, client);
+    for (const queueConfig of redriveClient.config.queueConfigs) {
+      redriveClient.redriveQueues[queueConfig.source] = new RedriveQueue(
+        queueConfig,
+        redriveClient.client,
       );
     }
     await Promise.all(
-      this.redriveQueueList.map((redriveQueue) => redriveQueue.getQueueUrl()),
+      redriveClient.redriveQueueList.map((redriveQueue) =>
+        redriveQueue.getQueueUrl(),
+      ),
     );
     await Promise.all(
-      this.redriveQueueList.map((redriveQueue) => redriveQueue.getAttributes()),
+      redriveClient.redriveQueueList.map((redriveQueue) =>
+        redriveQueue.getAttributes(),
+      ),
     );
-    return this;
+    return redriveClient;
+  }
+
+  async receiveMessages(): Promise<void> {
+    await Promise.all(
+      this.redriveQueueList.map((redriveQueue) =>
+        redriveQueue.receiveMessages(
+          this.config.dataDirectory,
+          this.config.count,
+          this.config.parseBody,
+        ),
+      ),
+    );
   }
 
   printQueues() {
@@ -45,53 +62,5 @@ export class RedriveClient {
             parseInt(a.ApproximateNumberOfMessages),
         ),
     );
-  }
-}
-
-export class RedriveQueue {
-  // During initialization
-  public configEntry: ConfigEntry;
-  private client: SQSClient;
-  public queueUrl!: string;
-  public queueAttributes!: Record<string, string>;
-
-  // Retrieve step
-
-  constructor(configEntry: ConfigEntry, client: SQSClient) {
-    this.configEntry = configEntry;
-    this.client = client;
-  }
-
-  async getQueueUrl() {
-    const queueUrl = (
-      await this.client.send(
-        new GetQueueUrlCommand({
-          QueueName: this.configEntry.source,
-        }),
-      )
-    ).QueueUrl;
-    if (!queueUrl)
-      throw new Error(
-        `Error retrieving queue url for ${this.configEntry.source}.`,
-      );
-    this.queueUrl = queueUrl;
-  }
-
-  async getAttributes() {
-    const queueAttributes = (
-      await this.client.send(
-        new GetQueueAttributesCommand({
-          QueueUrl: this.queueUrl,
-          AttributeNames: [
-            "ApproximateNumberOfMessages",
-            "CreatedTimestamp",
-            "QueueArn",
-          ],
-        }),
-      )
-    ).Attributes;
-    if (!queueAttributes)
-      throw new Error(`No attributes for queue ${this.configEntry.source}.`);
-    this.queueAttributes = queueAttributes;
   }
 }

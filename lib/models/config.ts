@@ -1,6 +1,11 @@
-export type Config = ConfigEntry[];
+export type Config = {
+  count: number;
+  dataDirectory: string;
+  parseBody: boolean;
+  queueConfigs: QueueConfig[];
+};
 
-export interface ConfigEntry {
+export interface QueueConfig {
   source: string;
   destination: string;
 }

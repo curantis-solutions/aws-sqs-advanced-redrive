@@ -22,16 +22,6 @@ const dir = `scripts/cache`;
 /**
  */
 const parser = yargs(process.argv.slice(2))
-  .option("source", {
-    alias: "s",
-    type: "string",
-    describe: "source queue url",
-  })
-  .option("destination", {
-    alias: "d",
-    type: "string",
-    describe: "destination queue url",
-  })
   .option("list", {
     alias: "l",
     type: "boolean",
@@ -42,6 +32,11 @@ const parser = yargs(process.argv.slice(2))
     type: "string",
     describe: "path to config",
   })
+  .option("receive", {
+    alias: "r",
+    type: "boolean",
+    describe: "receive messages and save to filesystem",
+  })
   .demandOption(["config"])
   .help();
 
@@ -49,9 +44,15 @@ async function script() {
   const argv = await parser.argv;
 
   const config = getConfig(argv.config);
-  const redriveClient = await new RedriveClient(config, client).initialize();
+  const redriveClient = await RedriveClient.createClient(config, client);
 
-  redriveClient.printQueues();
+  if (argv.list) {
+    redriveClient.printQueues();
+  }
+
+  if (argv.receive) {
+    await redriveClient.receiveMessages();
+  }
 
   // let messages: Message[] | undefined;
 
