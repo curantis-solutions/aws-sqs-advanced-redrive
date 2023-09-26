@@ -366,17 +366,17 @@ export class RedriveQueue {
         }
 
         console.debug(
-          `Deleted batch of ${batchedFiles.length} messages from ${this.queueConfig.source}.`,
+          `Deleted batch of ${fileBatch.length} messages from ${this.queueConfig.source}.`,
         );
 
-        for (const file of batchedFiles) {
+        for (const file of fileBatch) {
           // Move successful deletes to archive folder
           fs.renameSync(
             `${deletesPendingDirectory}/${file}`,
             `${deletesArchivedDirectory}/${file}`,
           );
         }
-        totalMessages += batchedFiles.length;
+        totalMessages += fileBatch.length;
       } catch (error) {
         console.error(error);
         atLeastOneFailure = true;
