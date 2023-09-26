@@ -87,7 +87,7 @@ export class RedriveQueue {
         }),
       );
 
-      if (!Messages) return;
+      if (!Messages) break;
 
       // Parse Body
       if (parseBody) {
