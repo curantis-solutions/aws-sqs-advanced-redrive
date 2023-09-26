@@ -8,7 +8,7 @@ export namespace Constants {
   export const skipsDirectory = "skip";
   export const updatesDirectory = "updates";
 
-  export const directoriesToCreate = [
+  export const directoryList = [
     deletesDirectory,
     receivedDirectory,
     processingErrors,

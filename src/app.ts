@@ -36,7 +36,15 @@ const parser = yargs(process.argv.slice(2))
     alias: "d",
     type: "boolean",
     describe:
-      "Deletes messages from the filesystem from their source. True if `send` is enabled..",
+      "Deletes messages from the filesystem from their source. True if `send` is enabled.",
+  })
+  .option("clean", {
+    type: "boolean",
+    describe: "Cleans all data directories except for received.",
+  })
+  .option("clean-all", {
+    type: "boolean",
+    describe: "Cleans all data directories.",
   })
   .demandOption(["config"])
   .help();
@@ -49,6 +57,10 @@ async function script() {
 
   if (argv.list) {
     redriveClient.printQueues();
+  }
+
+  if (argv.clean || argv["clean-all"]) {
+    redriveClient.clean(argv["clean-all"] ?? false);
   }
 
   if (argv.receive) {

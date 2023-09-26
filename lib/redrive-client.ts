@@ -58,6 +58,10 @@ export class RedriveClient {
     return redriveClient;
   }
 
+  clean(all: boolean) {
+    this.redriveQueueList.map((redriveQueue) => redriveQueue.clean(all));
+  }
+
   async receiveMessages(): Promise<void> {
     await Promise.all(
       this.redriveQueueList.map((redriveQueue) =>

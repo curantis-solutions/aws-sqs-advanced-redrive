@@ -118,7 +118,7 @@ export class RedriveQueue {
   }
 
   setupDirectories() {
-    for (const directory of Constants.directoriesToCreate) {
+    for (const directory of Constants.directoryList) {
       if (!fs.existsSync(`${this.baseDirectory}/${directory}`)) {
         fs.mkdirSync(`${this.baseDirectory}/${directory}`, { recursive: true });
       }
@@ -132,6 +132,46 @@ export class RedriveQueue {
         }
       }
     }
+  }
+
+  clean(all: boolean) {
+    let count = 0;
+    for (const directory of Constants.directoryList) {
+      // Delete each file in subdirectories
+      if (Constants.directoriesWithSubdirectories.includes(directory)) {
+        for (const subdirectory of Constants.subdirectoriesToCreate) {
+          for (const file of fs.readdirSync(
+            `${this.baseDirectory}/${directory}/${subdirectory}`,
+          )) {
+            const filePath = `${this.baseDirectory}/${directory}/${subdirectory}/${file}`;
+            if (fs.lstatSync(filePath).isDirectory()) {
+              continue;
+            }
+            fs.rmSync(filePath);
+            count++;
+          }
+        }
+      }
+      // Delete each flie in directories without subdirectories
+      else {
+        // Preserve the received directory unless `all` is true
+        if (!all && directory === Constants.receivedDirectory) {
+          continue;
+        }
+        // Delete every file in each directory, except subdirectories
+        for (const file of fs.readdirSync(
+          `${this.baseDirectory}/${directory}`,
+        )) {
+          const filePath = `${this.baseDirectory}/${directory}/${file}`;
+          if (fs.lstatSync(filePath).isDirectory()) {
+            continue;
+          }
+          fs.rmSync(filePath);
+          count++;
+        }
+      }
+    }
+    console.log(`Clean deleted ${count} files.`);
   }
 
   async sendMessages(parseBody: boolean): Promise<void> {
@@ -282,7 +322,7 @@ export class RedriveQueue {
       processedMessages.combine(batchProcessedMessages);
     }
     console.log(
-      `Processed all messages. ${processedMessages.deletes.length} deletes, ${processedMessages.errors.length} errors, ${processedMessages.skip.length} skip, ${processedMessages.updates.length} updates for ${this.queueConfig.source}.`,
+      `Processed all messages. ${processedMessages.deletes.length} deletes, ${processedMessages.errors.length} errors, ${processedMessages.skips.length} skip, ${processedMessages.updates.length} updates for ${this.queueConfig.source}.`,
     );
   }
 
