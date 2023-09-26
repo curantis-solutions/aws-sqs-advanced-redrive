@@ -1,15 +1,18 @@
 export namespace Constants {
   export const sqsBatchLimit = 10;
+  export const processingBatchLimit = 100;
 
   export const deletesDirectory = "deletes";
   export const receivedDirectory = "received";
-  export const skipDirectory = "skip";
+  export const processingErrors = "processing-errors";
+  export const skipsDirectory = "skip";
   export const updatesDirectory = "updates";
 
   export const directoriesToCreate = [
     deletesDirectory,
     receivedDirectory,
-    skipDirectory,
+    processingErrors,
+    skipsDirectory,
     updatesDirectory,
   ];
 

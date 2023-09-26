@@ -30,7 +30,7 @@ const parser = yargs(process.argv.slice(2))
     alias: "p",
     type: "boolean",
     describe:
-      "Copies, with potential filtering and modifications, the message from `received` to `updates/pending`, `skip`, or `deletes/pending`.",
+      "Copies, with potential filtering and modifications, the message from `received` to `updates/pending`, `skips`, or `deletes/pending`.",
   })
   .option("delete", {
     alias: "d",

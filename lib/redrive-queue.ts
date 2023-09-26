@@ -2,7 +2,6 @@ import {
   DeleteMessageBatchCommand,
   GetQueueAttributesCommand,
   GetQueueUrlCommand,
-  Message,
   ReceiveMessageCommand,
   SQSClient,
   SendMessageBatchCommand,
@@ -10,6 +9,11 @@ import {
 import fs from "fs";
 import { v4 as uuidv4 } from "uuid";
 import { Constants } from "./constants/constants";
+import {
+  MessageProcessorReducer,
+  ParsedMessage,
+  ProcessedMessages,
+} from "./message-processor";
 import { QueueConfig } from "./models/config";
 import { batch } from "./util";
 
@@ -150,7 +154,7 @@ export class RedriveQueue {
         (file) =>
           JSON.parse(
             fs.readFileSync(`${updatesPendingDirectory}/${file}`).toString(),
-          ) as Message,
+          ) as ParsedMessage,
       );
 
       let atLeastOneFailure = false;
@@ -194,6 +198,7 @@ export class RedriveQueue {
         totalMessages += fileBatch.length;
       } catch (error) {
         console.error(error);
+        atLeastOneFailure = true;
       }
 
       if (atLeastOneFailure) {
@@ -216,7 +221,70 @@ export class RedriveQueue {
     }
   }
 
-  async processMessages(): Promise<void> {}
+  async processMessages(
+    messageProcessorReducer: MessageProcessorReducer,
+  ): Promise<void> {
+    const receivedDirectory = `${this.baseDirectory}/${Constants.receivedDirectory}`;
+    const processingErrorsDirectory = `${this.baseDirectory}/${Constants.processingErrors}`;
+    const deletesPendingDirectory = `${this.baseDirectory}/${Constants.deletesDirectory}/${Constants.pendingSubdirectory}`;
+    const updatesPendingDirectory = `${this.baseDirectory}/${Constants.updatesDirectory}/${Constants.pendingSubdirectory}`;
+    const skipsDirectory = `${this.baseDirectory}/${Constants.skipsDirectory}`;
+
+    const files = fs.readdirSync(receivedDirectory);
+    if (files.length === 0) {
+      console.log(`No messages to process for ${this.queueConfig.source}`);
+      return;
+    }
+
+    const batchedFiles = batch(files, Constants.processingBatchLimit);
+
+    const processedMessages = new ProcessedMessages();
+    for (const fileBatch of batchedFiles) {
+      const messages = fileBatch.map(
+        (file) =>
+          JSON.parse(
+            fs.readFileSync(`${receivedDirectory}/${file}`).toString(),
+          ) as ParsedMessage,
+      );
+      const batchProcessedMessages = messages.reduce(
+        messageProcessorReducer,
+        new ProcessedMessages(),
+      );
+      console.debug(
+        `Processed batch. ${batchProcessedMessages.deletes.length} deletes, ${batchProcessedMessages.errors.length} errors, ${batchProcessedMessages.skips.length} skips, ${batchProcessedMessages.updates.length} updates for ${this.queueConfig.source}.`,
+      );
+
+      // Route messages
+      for (const message of batchProcessedMessages.deletes) {
+        fs.cpSync(
+          `${receivedDirectory}/${message.MessageId!}.json`,
+          `${deletesPendingDirectory}/${message.MessageId!}.json`,
+        );
+      }
+      for (const message of batchProcessedMessages.errors) {
+        fs.cpSync(
+          `${receivedDirectory}/${message.MessageId!}.json`,
+          `${processingErrorsDirectory}/${message.MessageId!}.json`,
+        );
+      }
+      for (const message of batchProcessedMessages.skips) {
+        fs.cpSync(
+          `${receivedDirectory}/${message.MessageId!}.json`,
+          `${skipsDirectory}/${message.MessageId!}.json`,
+        );
+      }
+      for (const message of batchProcessedMessages.updates) {
+        fs.writeFileSync(
+          `${updatesPendingDirectory}/${message.MessageId!}.json`,
+          JSON.stringify(message, null, 2),
+        );
+      }
+      processedMessages.combine(batchProcessedMessages);
+    }
+    console.log(
+      `Processed all messages. ${processedMessages.deletes.length} deletes, ${processedMessages.errors.length} errors, ${processedMessages.skip.length} skip, ${processedMessages.updates.length} updates for ${this.queueConfig.source}.`,
+    );
+  }
 
   async deleteMessages(): Promise<void> {
     const deletesPendingDirectory = `${this.baseDirectory}/${Constants.deletesDirectory}/${Constants.pendingSubdirectory}`;
@@ -237,7 +305,7 @@ export class RedriveQueue {
         (file) =>
           JSON.parse(
             fs.readFileSync(`${deletesPendingDirectory}/${file}`).toString(),
-          ) as Message,
+          ) as ParsedMessage,
       );
 
       let atLeastOneFailure = false;
@@ -273,6 +341,7 @@ export class RedriveQueue {
         totalMessages += batchedFiles.length;
       } catch (error) {
         console.error(error);
+        atLeastOneFailure = true;
       }
 
       if (atLeastOneFailure) {

@@ -1,6 +1,7 @@
 ## Use
 
 Copy the example config file, `config/example.yaml`.
+Copy the example message processor, `config/message-processors-example.ts`.
 
 Set AWS profile (optional):
 
@@ -14,23 +15,31 @@ Receive messages:
 
 `npm run redrive -- -c config/example.yaml -r`
 
+Process messages:
+
+`npm run redrive -- -c config/example.yaml -p`
+
+Send messages:
+
+`npm run redrive -- -c config/example.yaml -s`
+
 ## Directory Structure
 
 ```
 /messages (`dataDirectory`)
   /<queue name>
-      /received (original messages from --receive)
-        <message id>.json
-      /updates
-        /pending (place messages here to send and delete from the source queue)
-        /archived (messages placed here on success)
-        /errors (messages placed here on failure)
-      /delete
+      /deletes
         /pending (place messages in here to delete the messages from the source queue)
         /archived (messages placed here on success)
         /errors (messages placed here on failure)
-      /skip
-        /pending (place messages here to skip)
+      /processing-errors (stores errors from the processing step)
+        <message id>.json
+      /received (original messages from --receive)
+        <message id>.json
+      /skips (place messages here to skips)
+        <message id>.json
+      /updates
+        /pending (place messages here to send and delete from the source queue)
         /archived (messages placed here on success)
         /errors (messages placed here on failure)
 ```

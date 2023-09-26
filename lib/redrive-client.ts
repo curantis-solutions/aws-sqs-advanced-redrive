@@ -1,4 +1,8 @@
 import { SQSClient } from "@aws-sdk/client-sqs";
+import {
+  MessageProcessorReducer,
+  messageProcesserReducers,
+} from "./message-processor";
 import { Config } from "./models/config";
 import { RedriveQueue } from "./redrive-queue";
 
@@ -6,6 +10,7 @@ export class RedriveClient {
   public config: Config;
   private client: SQSClient;
   private redriveQueues: Record<string, RedriveQueue> = {};
+  private messageProcessors: Record<string, MessageProcessorReducer> = {};
 
   constructor(config: Config, client: SQSClient) {
     this.config = config;
@@ -21,6 +26,18 @@ export class RedriveClient {
     client: SQSClient,
   ): Promise<RedriveClient> {
     const redriveClient = new RedriveClient(config, client);
+
+    // Import processors
+    try {
+      const processorsModule = await import(
+        `../config/${config.messageProcessors}`
+      );
+      redriveClient.messageProcessors = processorsModule.getProcessors();
+    } catch (error) {
+      redriveClient.messageProcessors = messageProcesserReducers;
+    }
+
+    // Setup queues
     for (const queueConfig of redriveClient.config.queueConfigs) {
       redriveClient.redriveQueues[queueConfig.source] = new RedriveQueue(
         queueConfig,
@@ -54,9 +71,14 @@ export class RedriveClient {
 
   async processMessages(): Promise<void> {
     await Promise.all(
-      this.redriveQueueList.map((redriveQueue) =>
-        redriveQueue.processMessages(),
-      ),
+      this.redriveQueueList.map((redriveQueue) => {
+        const processor =
+          redriveQueue.queueConfig.processor &&
+          this.messageProcessors[redriveQueue.queueConfig.processor]
+            ? this.messageProcessors[redriveQueue.queueConfig.processor]
+            : this.messageProcessors.directRedriveReducer;
+        return redriveQueue.processMessages(processor);
+      }),
     );
   }
 

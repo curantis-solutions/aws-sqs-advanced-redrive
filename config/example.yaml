@@ -1,5 +1,7 @@
 receiveCount: 10
 dataDirectory: messages
+messageProcessors: message-processors
 queueConfigs:
   - source: source-dlq
     destination: source-queue
+    processor: directRedriveReducer
