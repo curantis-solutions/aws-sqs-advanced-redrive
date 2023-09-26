@@ -32,6 +32,7 @@ export class RedriveQueue {
     this.queueConfig = queueConfig;
     this.client = client;
     this.baseDirectory = `${dataDirectory}/${this.queueConfig.source}`;
+    this.setupDirectories();
   }
 
   async getQueueUrl() {
@@ -98,10 +99,7 @@ export class RedriveQueue {
         });
       }
 
-      // Setup directory structure
       const receivedDirectory = `${this.baseDirectory}/${Constants.receivedDirectory}`;
-      this.setupDirectories();
-
       // Write to filesystem
       for (const message of Messages ?? []) {
         const filename = `${receivedDirectory}/${message.MessageId}.json`;
