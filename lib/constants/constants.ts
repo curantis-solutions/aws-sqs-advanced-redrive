@@ -5,7 +5,7 @@ export namespace Constants {
   export const deletesDirectory = "deletes";
   export const receivedDirectory = "received";
   export const processingErrors = "processing-errors";
-  export const skipsDirectory = "skip";
+  export const skipsDirectory = "skips";
   export const updatesDirectory = "updates";
 
   export const directoryList = [

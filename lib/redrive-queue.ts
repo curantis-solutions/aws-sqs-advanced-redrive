@@ -138,16 +138,11 @@ export class RedriveQueue {
       // Delete each file in subdirectories
       if (Constants.directoriesWithSubdirectories.includes(directory)) {
         for (const subdirectory of Constants.subdirectoriesToCreate) {
-          for (const file of fs.readdirSync(
+          count = this.cleanDirectory(
             `${this.baseDirectory}/${directory}/${subdirectory}`,
-          )) {
-            const filePath = `${this.baseDirectory}/${directory}/${subdirectory}/${file}`;
-            if (fs.lstatSync(filePath).isDirectory()) {
-              continue;
-            }
-            fs.rmSync(filePath);
-            count++;
-          }
+            count,
+            false,
+          );
         }
       }
       // Delete each flie in directories without subdirectories
@@ -156,20 +151,30 @@ export class RedriveQueue {
         if (!all && directory === Constants.receivedDirectory) {
           continue;
         }
-        // Delete every file in each directory, except subdirectories
-        for (const file of fs.readdirSync(
+        // Delete every file in each directory
+        count = this.cleanDirectory(
           `${this.baseDirectory}/${directory}`,
-        )) {
-          const filePath = `${this.baseDirectory}/${directory}/${file}`;
-          if (fs.lstatSync(filePath).isDirectory()) {
-            continue;
-          }
-          fs.rmSync(filePath);
-          count++;
-        }
+          count,
+          directory === Constants.skipsDirectory, // Recursively delete for the skips directory only
+        );
       }
     }
-    console.log(`Clean deleted ${count} files.`);
+    console.log(`Clean deleted ${count} files/directories.`);
+  }
+
+  cleanDirectory(directory: string, count: number, recursive = false): number {
+    for (const file of fs.readdirSync(directory)) {
+      count++;
+      const filePath = `${directory}/${file}`;
+      if (fs.lstatSync(filePath).isDirectory()) {
+        if (recursive) {
+          fs.rmSync(filePath, { recursive: true });
+        }
+        continue;
+      }
+      fs.rmSync(filePath);
+    }
+    return count;
   }
 
   async sendMessages(parseBody: boolean): Promise<void> {
@@ -277,6 +282,7 @@ export class RedriveQueue {
     const batchedFiles = batch(files, Constants.processingBatchLimit);
 
     const processedMessages = new ProcessedMessages();
+    let skipsProcessedCount = 0;
     for (const fileBatch of batchedFiles) {
       const messages = fileBatch.map(
         (file) =>
@@ -288,8 +294,11 @@ export class RedriveQueue {
         messageProcessorReducer,
         new ProcessedMessages(),
       );
+      const skipsBatchedCount = Object.values(
+        batchProcessedMessages.skips,
+      ).reduce((acc, val) => acc + val.length, 0);
       console.debug(
-        `Processed batch. ${batchProcessedMessages.deletes.length} deletes, ${batchProcessedMessages.errors.length} errors, ${batchProcessedMessages.skips.length} skips, ${batchProcessedMessages.updates.length} updates for ${this.queueConfig.source}.`,
+        `Processed batch. ${batchProcessedMessages.deletes.length} deletes, ${batchProcessedMessages.errors.length} errors, ${skipsBatchedCount} skips, ${batchProcessedMessages.updates.length} updates for ${this.queueConfig.source}.`,
       );
 
       // Route messages
@@ -305,11 +314,15 @@ export class RedriveQueue {
           `${processingErrorsDirectory}/${message.MessageId!}.json`,
         );
       }
-      for (const message of batchProcessedMessages.skips) {
-        fs.cpSync(
-          `${receivedDirectory}/${message.MessageId!}.json`,
-          `${skipsDirectory}/${message.MessageId!}.json`,
-        );
+      for (const [key, value] of Object.entries(batchProcessedMessages.skips)) {
+        for (const message of value) {
+          const skipSubdirectory = key === "root" ? "" : key;
+          skipsProcessedCount++;
+          fs.cpSync(
+            `${receivedDirectory}/${message.MessageId!}.json`,
+            `${skipsDirectory}/${skipSubdirectory}/${message.MessageId!}.json`,
+          );
+        }
       }
       for (const message of batchProcessedMessages.updates) {
         fs.writeFileSync(
@@ -320,7 +333,7 @@ export class RedriveQueue {
       processedMessages.combine(batchProcessedMessages);
     }
     console.log(
-      `Processed all messages. ${processedMessages.deletes.length} deletes, ${processedMessages.errors.length} errors, ${processedMessages.skips.length} skip, ${processedMessages.updates.length} updates for ${this.queueConfig.source}.`,
+      `Processed all messages. ${processedMessages.deletes.length} deletes, ${processedMessages.errors.length} errors, ${skipsProcessedCount} skips, ${processedMessages.updates.length} updates for ${this.queueConfig.source}.`,
     );
   }
 

@@ -4,24 +4,33 @@ export interface ParsedMessage<T = any> extends Omit<Message, "Body"> {
   Body?: T;
 }
 
+export interface Skips {
+  root: ParsedMessage[];
+  [key: string]: ParsedMessage[];
+}
 export class ProcessedMessages {
   public deletes: ParsedMessage[];
   public errors: ParsedMessage[];
-  public skips: ParsedMessage[];
+  public skips: Skips;
   public updates: ParsedMessage[];
 
   constructor() {
     this.deletes = [];
     this.errors = [];
-    this.skips = [];
+    this.skips = {
+      root: [],
+    };
     this.updates = [];
   }
 
   combine(processedMessages: ProcessedMessages) {
     this.deletes = [...this.deletes, ...processedMessages.deletes];
     this.errors = [...this.errors, ...processedMessages.errors];
-    this.skips = [...this.skips, ...processedMessages.skips];
     this.updates = [...this.updates, ...processedMessages.updates];
+
+    for (const key of Object.keys(this.skips)) {
+      this.skips[key] = [...this.skips[key], ...processedMessages.skips[key]];
+    }
   }
 }
 
@@ -30,11 +39,15 @@ export type MessageProcessorReducer = (
   message: ParsedMessage,
 ) => ProcessedMessages;
 
+export type SkipFunction = (message: ParsedMessage) => {
+  shouldSkip: boolean;
+  subdirectory?: string;
+};
 export type TruthyFunction = (message: ParsedMessage) => boolean;
 export type UpdateMapper = (message: ParsedMessage) => ParsedMessage;
 
 export function createMessageReducer(
-  shouldSkip: TruthyFunction,
+  skipFunction: SkipFunction,
   shouldDelete: TruthyFunction,
   updateMapper: UpdateMapper,
 ): MessageProcessorReducer {
@@ -44,8 +57,11 @@ export function createMessageReducer(
         processedMessages.deletes.push(message);
         return processedMessages;
       }
-      if (shouldSkip(message)) {
-        processedMessages.skips.push(message);
+      const { shouldSkip, subdirectory } = skipFunction(message);
+      if (shouldSkip) {
+        processedMessages.skips[subdirectory ?? "root"] =
+          processedMessages.skips[subdirectory ?? "root"] ?? [];
+        processedMessages.skips[subdirectory ?? "root"].push(message);
         return processedMessages;
       }
       processedMessages.updates.push(updateMapper(message));
@@ -59,7 +75,9 @@ export function createMessageReducer(
 
 export const directRedriveReducer: MessageProcessorReducer =
   createMessageReducer(
-    () => false,
+    () => {
+      return { shouldSkip: true };
+    },
     () => false,
     (message) => message,
   );
