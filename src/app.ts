@@ -3,8 +3,6 @@ import yargs from "yargs/yargs";
 import { getConfig } from "../lib/get-config";
 import { RedriveClient } from "../lib/redrive-client";
 
-const client = new SQSClient({});
-
 const parser = yargs(process.argv.slice(2))
   .option("list", {
     alias: "l",
@@ -46,11 +44,19 @@ const parser = yargs(process.argv.slice(2))
     type: "boolean",
     describe: "Cleans all data directories.",
   })
+  .option("local", {
+    type: "boolean",
+    describe: "Use localstack.",
+  })
   .demandOption(["config"])
   .help();
 
 async function script() {
   const argv = await parser.argv;
+
+  const client = new SQSClient({
+    endpoint: argv.local ? "http://localhost:4566" : undefined,
+  });
 
   const config = getConfig(argv.config);
   const redriveClient = await RedriveClient.createClient(config, client);
