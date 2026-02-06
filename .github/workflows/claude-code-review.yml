@@ -1,0 +1,17 @@
+name: Claude Code PR Review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+permissions:
+  contents: read
+  pull-requests: write
+  issues: write
+  id-token: write
+
+jobs:
+  claude-review:
+    uses: curantis-solutions/curantis-ci-workflows/.github/workflows/claude-code-review.yml@main
+    secrets:
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
